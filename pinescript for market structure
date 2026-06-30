@@ -1,3 +1,4 @@
+```pinescript
 //@version=6
 //==================================================
 // HEAVENLY EDGE AI
@@ -229,3 +230,4 @@ structureDirection := marketStructure == "HH" or marketStructure == "HL" ? "Bull
 //==================================================
 // RISK ENGINE
 //==================================================
+```
