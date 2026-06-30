@@ -1,0 +1,195 @@
+
+//@version=6
+//==================================================
+// HEAVENLY EDGE AI
+//==================================================
+indicator(
+    "Heavenly Edge AI™",
+    shorttitle = "HEAI",
+    overlay = true,
+    max_labels_count = 500,
+    max_lines_count = 500,
+    max_boxes_count = 500
+)
+
+// Inputs
+groupSessions = "Session Engine"
+asiaEnabled = input.bool(true, "Enable Asia", group=groupSessions)
+asiaSession = input.session("1800-0000", "Asia Session", group=groupSessions)
+asiaColor = input.color(color.new(color.aqua, 0), "Asia Color", group=groupSessions)
+
+londonEnabled = input.bool(true, "Enable London", group=groupSessions)
+londonSession = input.session("0200-0500", "London Session", group=groupSessions)
+londonColor = input.color(color.new(color.blue, 0), "London Color", group=groupSessions)
+
+newYorkEnabled = input.bool(true, "Enable New York", group=groupSessions)
+newYorkSession = input.session("0930-1600", "New York Session", group=groupSessions)
+newYorkColor = input.color(color.new(color.green, 0), "New York Color", group=groupSessions)
+
+groupSwings = "Swing Engine"
+swingLength = input.int(5, "Swing Length", minval=1, maxval=50, group=groupSwings)
+
+groupDashboard = "Mission Control Dashboard"
+showDashboard = input.bool(true, "Show Dashboard", group=groupDashboard)
+
+// Global Variables
+var string currentSession = "None"
+var bool sessionActive = false
+var int sessionScore = 100
+var color currentSessionColor = color.gray
+
+var float lastSwingHigh = na
+var float lastSwingLow = na
+var float previousSwingHigh = na
+var float previousSwingLow = na
+
+var string marketTrend = "Ranging"
+var int trendStrength = 100
+
+var string coachMessage = "Outside Trading Session"
+var string statusMessage = "WATCH"
+const string SCRIPT_VERSION = "Alpha 0.3"
+var string versionLabel = SCRIPT_VERSION
+
+var table missionControl = table.new(position.top_right, 2, 12, border_width=1)
+if barstate.isfirst
+    table.merge_cells(missionControl, 0, 0, 1, 0)
+
+// Utility Functions
+isInSession(string sessionTime) =>
+    not na(time(timeframe.period, sessionTime))
+
+getTrend(float recentHigh, float priorHigh, float recentLow, float priorLow) =>
+    string trend = "Ranging"
+    if not na(recentHigh) and not na(priorHigh) and not na(recentLow) and not na(priorLow)
+        if recentHigh > priorHigh and recentLow > priorLow
+            trend := "Bullish"
+        else if recentHigh < priorHigh and recentLow < priorLow
+            trend := "Bearish"
+    trend
+
+getQualityText(int score) =>
+    score >= 80 ? "Premium" : score >= 60 ? "Good" : "Low"
+
+getStatusColor(string status) =>
+    status == "WATCH" ? color.new(color.yellow, 0) : color.new(color.gray, 0)
+
+setDashboardCell(table dashboard, int column, int row, string celltext, color textColor, color backgroundColor) =>
+    table.cell(dashboard, column, row, celltext, text_color=textColor, bgcolor=backgroundColor, text_size=size.small)
+
+//==================================================
+// SESSION ENGINE
+//==================================================
+asiaActive = asiaEnabled and isInSession(asiaSession)
+londonActive = londonEnabled and isInSession(londonSession)
+newYorkActive = newYorkEnabled and isInSession(newYorkSession)
+
+sessionActive := asiaActive or londonActive or newYorkActive
+currentSession := newYorkActive ? "New York" : londonActive ? "London" : asiaActive ? "Asia" : "None"
+currentSessionColor := newYorkActive ? newYorkColor : londonActive ? londonColor : asiaActive ? asiaColor : color.gray
+sessionScore := sessionActive ? 100 : 0
+coachMessage := sessionActive ? "Watching Market..." : "Outside Trading Session"
+
+sessionStarted = sessionActive and not sessionActive[1]
+sessionEnded = not sessionActive and sessionActive[1]
+
+//==================================================
+// SWING ENGINE
+//==================================================
+pivotHigh = ta.pivothigh(high, swingLength, swingLength)
+pivotLow = ta.pivotlow(low, swingLength, swingLength)
+
+if not na(pivotHigh)
+    previousSwingHigh := lastSwingHigh
+    lastSwingHigh := pivotHigh
+
+if not na(pivotLow)
+    previousSwingLow := lastSwingLow
+    lastSwingLow := pivotLow
+
+//==================================================
+// TREND ENGINE
+//==================================================
+previousMarketTrend = marketTrend
+marketTrend := getTrend(lastSwingHigh, previousSwingHigh, lastSwingLow, previousSwingLow)
+trendStrength := marketTrend == "Bullish" or marketTrend == "Bearish" ? 100 : 0
+trendChanged = marketTrend != previousMarketTrend
+
+//==================================================
+// MISSION CONTROL DASHBOARD
+//==================================================
+//==================================================
+// DASHBOARD UPDATE
+//==================================================
+if showDashboard
+    headerBackground = color.new(color.black, 0)
+    labelBackground = color.new(color.rgb(20, 20, 20), 0)
+    valueBackground = color.new(color.rgb(35, 35, 35), 0)
+    neutralText = color.new(color.white, 0)
+    mutedText = color.new(color.silver, 0)
+    trendColor = marketTrend == "Bullish" ? color.new(color.lime, 0) : marketTrend == "Bearish" ? color.new(color.red, 0) : color.new(color.orange, 0)
+
+    setDashboardCell(missionControl, 0, 0, "HEAVENLY EDGE AI", neutralText, headerBackground)
+
+    setDashboardCell(missionControl, 0, 1, "Session", mutedText, labelBackground)
+    setDashboardCell(missionControl, 1, 1, currentSession, neutralText, color.new(currentSessionColor, 70))
+
+    setDashboardCell(missionControl, 0, 2, "Trend", mutedText, labelBackground)
+    setDashboardCell(missionControl, 1, 2, marketTrend, trendColor, valueBackground)
+
+    setDashboardCell(missionControl, 0, 3, "Quality", mutedText, labelBackground)
+    setDashboardCell(missionControl, 1, 3, getQualityText(sessionScore), neutralText, valueBackground)
+
+    setDashboardCell(missionControl, 0, 4, "Coach", mutedText, labelBackground)
+    setDashboardCell(missionControl, 1, 4, coachMessage, neutralText, valueBackground)
+
+    setDashboardCell(missionControl, 0, 5, "Status", mutedText, labelBackground)
+    setDashboardCell(missionControl, 1, 5, statusMessage, getStatusColor(statusMessage), valueBackground)
+
+    setDashboardCell(missionControl, 0, 6, "Version", mutedText, labelBackground)
+    setDashboardCell(missionControl, 1, 6, versionLabel, neutralText, headerBackground)
+else
+    table.clear(missionControl, 0, 0, 1, 11)
+
+//==================================================
+// ALERTS
+//==================================================
+alertcondition(sessionStarted, "Session Started", "Heavenly Edge AI: Session started.")
+alertcondition(sessionEnded, "Session Ended", "Heavenly Edge AI: Session ended.")
+alertcondition(trendChanged, "Trend Changed", "Heavenly Edge AI: Market trend changed.")
+
+//==================================================
+// MARKET STRUCTURE ENGINE
+//==================================================
+
+//==================================================
+// BOS ENGINE
+//==================================================
+
+//==================================================
+// CHOCH ENGINE
+//==================================================
+
+//==================================================
+// LIQUIDITY ENGINE
+//==================================================
+
+//==================================================
+// ORDER BLOCK ENGINE
+//==================================================
+
+//==================================================
+// FAIR VALUE GAP ENGINE
+//==================================================
+
+//==================================================
+// DECISION ENGINE
+//==================================================
+
+//==================================================
+// ENTRY ENGINE
+//==================================================
+
+//==================================================
+// RISK ENGINE
+//==================================================
